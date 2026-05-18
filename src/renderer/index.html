@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>NetShare</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="title">
+      <span class="dot"></span>
+      <h1>NetShare</h1>
+      <span class="subtitle">Windows Internet Connection Sharing</span>
+    </div>
+    <div class="header-actions">
+      <button id="btn-refresh" class="btn btn-ghost" title="Refresh adapters">↻ Refresh</button>
+      <button id="btn-hotspot" class="btn btn-ghost">📶 Hotspot</button>
+      <button id="btn-options" class="btn btn-ghost">⚙ Options</button>
+    </div>
+  </header>
+
+  <section id="status-bar" class="status-bar status-idle">
+    <div class="status-line">
+      <span class="status-label">Status:</span>
+      <span id="status-text">Idle — no sharing active</span>
+    </div>
+    <div class="status-line muted">
+      <span id="status-detail">Select an internet source on the left and a target adapter on the right.</span>
+    </div>
+  </section>
+
+  <main class="columns">
+    <section class="col" data-role="public">
+      <header class="col-header">
+        <h2>Internet Source</h2>
+        <span class="col-hint">Adapter that has internet (will be shared)</span>
+      </header>
+      <ul id="list-public" class="adapter-list"></ul>
+    </section>
+
+    <section class="col" data-role="private">
+      <header class="col-header">
+        <h2>Share To</h2>
+        <span class="col-hint">Adapter that will receive shared internet</span>
+      </header>
+      <ul id="list-private" class="adapter-list"></ul>
+    </section>
+  </main>
+
+  <section id="clients-panel" class="clients-panel hidden">
+    <header class="clients-header">
+      <span class="clients-title">Connected Clients <span id="clients-count" class="clients-count">(0)</span></span>
+      <button id="btn-clients-refresh" class="btn-icon" title="Refresh clients">↻</button>
+    </header>
+    <ul id="clients-list" class="clients-list"></ul>
+  </section>
+
+  <footer class="app-footer">
+    <div class="selection-summary" id="selection-summary">
+      <span class="pill pill-public">Source: <strong id="sel-public">—</strong></span>
+      <span class="arrow">→</span>
+      <span class="pill pill-private">Target: <strong id="sel-private">—</strong></span>
+    </div>
+    <div class="footer-actions">
+      <button id="btn-start" class="btn btn-primary" disabled>▶ Start Sharing</button>
+      <button id="btn-stop" class="btn btn-danger">■ Stop Sharing</button>
+    </div>
+  </footer>
+
+  <section id="console-panel" class="console-panel hidden">
+    <div id="console-resize" class="console-resize-handle" title="Drag to resize"></div>
+    <header class="console-header">
+      <span class="console-title">Activity Log</span>
+      <button id="btn-console-clear" class="btn-icon" title="Clear log">Clear</button>
+    </header>
+    <ul id="console-log" class="console-log"></ul>
+  </section>
+
+  <div id="options-overlay" class="overlay hidden">
+    <div class="modal" role="dialog" aria-labelledby="options-title">
+      <header class="modal-header">
+        <h2 id="options-title">Options</h2>
+        <button id="btn-options-close" class="btn-icon" aria-label="Close">✕</button>
+      </header>
+      <div class="modal-body">
+        <label class="field">
+          <span>Auto-refresh interval (seconds)</span>
+          <input type="number" id="opt-refresh" min="0" max="120" step="1" />
+          <small>0 disables auto-refresh.</small>
+        </label>
+
+        <label class="field-row">
+          <input type="checkbox" id="opt-disconnected" />
+          <span>Show disconnected adapters</span>
+        </label>
+
+        <label class="field-row">
+          <input type="checkbox" id="opt-elevate" />
+          <span>Request administrator elevation when toggling sharing</span>
+        </label>
+
+        <label class="field-row">
+          <input type="checkbox" id="opt-console" />
+          <span>Show activity log below Start/Stop buttons</span>
+        </label>
+
+        <label class="field-row">
+          <input type="checkbox" id="opt-tray" />
+          <span>Close window to system tray (keeps NetShare running)</span>
+        </label>
+      </div>
+      <footer class="modal-footer">
+        <button id="btn-options-cancel" class="btn btn-ghost">Cancel</button>
+        <button id="btn-options-save" class="btn btn-primary">Save</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="hotspot-overlay" class="overlay hidden">
+    <div class="modal" role="dialog" aria-labelledby="hotspot-title">
+      <header class="modal-header">
+        <h2 id="hotspot-title">📶 Mobile Hotspot</h2>
+        <button id="btn-hotspot-close" class="btn-icon" aria-label="Close">✕</button>
+      </header>
+      <div class="modal-body">
+        <div class="hotspot-status">
+          <span class="hotspot-status-label">Status</span>
+          <span id="hotspot-state" class="hotspot-state-pill off">—</span>
+          <span class="hotspot-status-label">Sharing</span>
+          <span id="hotspot-conn" class="hotspot-conn-name">—</span>
+        </div>
+
+        <label class="field">
+          <span>SSID (network name)</span>
+          <input type="text" id="hotspot-ssid" maxlength="32" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          <span>Password (8–63 characters)</span>
+          <div class="hotspot-pass-row">
+            <input type="password" id="hotspot-pass" minlength="8" maxlength="63" autocomplete="new-password" />
+            <button type="button" id="btn-hotspot-pass-toggle" class="btn btn-ghost">Show</button>
+          </div>
+        </label>
+
+        <fieldset class="hotspot-band">
+          <legend>Wi-Fi band</legend>
+          <label class="band-option">
+            <input type="radio" name="hotspot-band" value="Auto" />
+            <span><strong>Auto</strong> — let Windows pick the best band</span>
+          </label>
+          <label class="band-option">
+            <input type="radio" name="hotspot-band" value="TwoPointFourGigahertz" />
+            <span><strong>2.4 GHz</strong> — broader range, best compatibility</span>
+          </label>
+          <label class="band-option">
+            <input type="radio" name="hotspot-band" value="FiveGigahertz" />
+            <span><strong>5 GHz</strong> — higher throughput, shorter range</span>
+          </label>
+        </fieldset>
+
+        <div class="hotspot-clients-info">
+          <span id="hotspot-clients">0</span> of <span id="hotspot-max">8</span> clients connected
+        </div>
+      </div>
+      <footer class="modal-footer">
+        <button id="btn-hotspot-cancel" class="btn btn-ghost">Close</button>
+        <button id="btn-hotspot-apply"  class="btn">Apply</button>
+        <button id="btn-hotspot-toggle" class="btn btn-primary">▶ Start Hotspot</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

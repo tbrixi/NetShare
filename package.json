@@ -1,0 +1,60 @@
+{
+  "name": "netshare",
+  "productName": "NetShare",
+  "version": "1.0.0",
+  "description": "Manage Windows Internet Connection Sharing (ICS) between network adapters",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electronmon .",
+    "icon": "powershell -NoProfile -ExecutionPolicy Bypass -File build/make-icon.ps1",
+    "clear": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "electron-builder --win portable",
+    "pack": "electron-builder --dir"
+  },
+  "electronmon": {
+    "patterns": [
+      "src/main/**/*.js",
+      "src/preload.js",
+      "src/scripts/**/*.ps1",
+      "src/renderer/**/*"
+    ],
+    "logLevel": "quiet"
+  },
+  "build": {
+    "appId": "com.netshare.app",
+    "productName": "NetShare",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.ico",
+      "package.json",
+      "!**/*.{md,log}",
+      "!**/node_modules/**/{test,tests,__tests__,docs,example,examples}/**"
+    ],
+    "asarUnpack": [
+      "src/scripts/**"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^26.8.1",
+    "electronmon": "^2.0.4"
+  }
+}
