@@ -6,6 +6,8 @@ recipient, click Start. The app reads live ICS state from Windows on a poll,
 so it always reflects what the OS actually has configured (including changes
 made from the Network & Sharing Center).
 
+![NetShare main window](docs/screenshot.png)
+
 ## Features
 
 - **Two-column adapter picker** — left column selects the Internet source
