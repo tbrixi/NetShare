@@ -22,6 +22,14 @@ html, body {
   font-size: 14px;
   background: var(--bg);
   color: var(--text);
+  user-select: text;
+  cursor: default;
+}
+/* Keep controls click-only so dragging on them doesn't start a text selection. */
+button, .btn, .btn-icon, .btn-primary, .btn-danger, .btn-ghost,
+.console-resize-handle, .col-header, .app-header, .clients-header,
+.modal-header, .modal-footer, .selection-summary, .pill, .status-bar,
+input[type="checkbox"], input[type="radio"], label.field-row, label.band-option {
   user-select: none;
 }
 
@@ -471,6 +479,7 @@ body {
   text-transform: uppercase;
   color: var(--text-muted);
 }
+.console-actions { display: flex; align-items: center; gap: 4px; }
 
 .console-log {
   list-style: none;

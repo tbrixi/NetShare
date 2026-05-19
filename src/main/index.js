@@ -2,6 +2,7 @@ const { app, BrowserWindow } = require('electron');
 const { createMainWindow, focusMainWindow } = require('./window.js');
 const ipc = require('./ipc.js');
 const tray = require('./tray.js');
+const settings = require('./settings.js');
 
 app.isQuitting = false;
 
@@ -22,9 +23,12 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('before-quit', () => { app.isQuitting = true; });
 
-  // With a tray icon, hiding the window is not the same as quitting; we only
-  // exit the app when the user explicitly chose "Quit" (sets isQuitting).
+  // With a tray icon, hiding the window is not the same as quitting. When
+  // minimizeToTray is on, the close button hides the window (handled in
+  // window.js) so this event doesn't fire. When it's off, the window is
+  // actually destroyed — quit the app so the tray process doesn't linger.
   app.on('window-all-closed', () => {
-    if (app.isQuitting && process.platform !== 'darwin') app.quit();
+    if (process.platform === 'darwin') return;
+    if (app.isQuitting || settings.load(app).minimizeToTray === false) app.quit();
   });
 }

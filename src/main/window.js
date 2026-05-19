@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, screen } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, screen } = require('electron');
 const path = require('node:path');
 const settings = require('./settings.js');
 
@@ -49,6 +49,29 @@ function createMainWindow() {
   });
   Menu.setApplicationMenu(null);
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+
+  // With no application menu, the standard Edit-role accelerators (Copy /
+  // Cut / Paste / Select All) aren't bound. Wire them by hand so users can
+  // copy any selected text in the renderer.
+  win.webContents.on('before-input-event', (_evt, input) => {
+    if (input.type !== 'keyDown' || !input.control || input.alt || input.meta) return;
+    const k = input.key.toLowerCase();
+    if (k === 'c') win.webContents.copy();
+    else if (k === 'x') win.webContents.cut();
+    else if (k === 'v') win.webContents.paste();
+    else if (k === 'a') win.webContents.selectAll();
+  });
+
+  // Right-click → Copy / Select All. When text is selected the menu shows
+  // Copy; otherwise it just offers Select All (no editable-field cases here).
+  win.webContents.on('context-menu', (_evt, params) => {
+    const items = [];
+    if (params.selectionText) {
+      items.push({ label: 'Copy', click: () => clipboard.writeText(params.selectionText) });
+    }
+    items.push({ label: 'Select All', click: () => win.webContents.selectAll() });
+    Menu.buildFromTemplate(items).popup({ window: win });
+  });
 
   // Auto-open DevTools when running from source / `npm run dev` — packaged
   // builds (app.isPackaged) keep DevTools closed.

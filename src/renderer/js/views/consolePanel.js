@@ -9,8 +9,40 @@ const MAX_ENTRIES = 500;
 export function mount(rootEl) {
   const list = rootEl.querySelector('#console-log');
   const clearBtn = rootEl.querySelector('#btn-console-clear');
+  const copyBtn = rootEl.querySelector('#btn-console-copy');
   const handle = rootEl.querySelector('#console-resize');
   clearBtn.addEventListener('click', () => { list.innerHTML = ''; });
+
+  copyBtn.addEventListener('click', async () => {
+    const lines = Array.from(list.children).map((li) => {
+      const t = li.querySelector('.time')?.textContent ?? '';
+      const m = li.querySelector('.msg')?.textContent ?? '';
+      return t ? `${t}  ${m}` : m;
+    });
+    const text = lines.join('\n');
+    const original = copyBtn.textContent;
+    const flash = (label) => {
+      copyBtn.textContent = label;
+      setTimeout(() => { copyBtn.textContent = original; }, 1200);
+    };
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      flash('Copied');
+    } catch {
+      flash('Failed');
+    }
+  });
 
   // Vertical resize via the top drag-handle. Height clamped between the panel's
   // CSS min-height (80) and most of the work area so the columns above always
