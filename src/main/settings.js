@@ -3,11 +3,16 @@ const path = require('node:path');
 
 const DEFAULT_SETTINGS = {
   refreshIntervalSec: 60,
+  chartIntervalSec: 5,
   showDisconnected: false,
   elevateOnToggle: true,
   showConsole: true,
   minimizeToTray: true,
-  lastPair: null
+  lastPair: null,
+  // The ICS pair this app last enabled ({ source, target }), or null. Used to
+  // identify the source when the unprivileged poll can't (e.g. VPN-tunnel
+  // uplinks that carry no default-gateway route). Cleared when sharing stops.
+  activeShare: null
 };
 
 function settingsPath(app) {

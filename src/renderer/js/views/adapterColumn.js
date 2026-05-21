@@ -46,6 +46,65 @@ function renderTraffic(adapter) {
   ]);
 }
 
+// Traffic-chart geometry. The SVG is drawn in this fixed coordinate space and
+// stretched to the card width via preserveAspectRatio="none".
+const CHART_W = 240;
+const CHART_H = 34;
+
+// Builds the per-adapter traffic chart shown at the bottom of the card.
+// `history` is a chronological list of { down, up } byte/sec samples. Download
+// and upload are drawn as two areas sharing one peak-based scale, in distinct
+// colours so both series stay readable where they overlap.
+function renderTrafficChart(adapter, history) {
+  const samples = Array.isArray(history) ? history : [];
+  if (samples.length < 2) {
+    return el('div', { class: 'adapter-chart empty' }, [
+      el('span', { class: 'chart-hint', text: 'Collecting traffic…' })
+    ]);
+  }
+
+  const peak = Math.max(1, ...samples.map(s => Math.max(s.down || 0, s.up || 0)));
+  const n = samples.length;
+  const stepX = CHART_W / (n - 1);
+  const xAt = (i) => (i * stepX).toFixed(1);
+  // 1px margin top and bottom so peaks and the baseline are not clipped.
+  const yAt = (v) => (CHART_H - 1 - (Math.min(v, peak) / peak) * (CHART_H - 2)).toFixed(1);
+
+  const areaPath = (key) => {
+    let d = `M 0 ${CHART_H}`;
+    samples.forEach((s, i) => { d += ` L ${xAt(i)} ${yAt(s[key] || 0)}`; });
+    return d + ` L ${CHART_W} ${CHART_H} Z`;
+  };
+  const linePath = (key) => {
+    let d = '';
+    samples.forEach((s, i) => { d += `${i ? 'L' : 'M'}${xAt(i)} ${yAt(s[key] || 0)} `; });
+    return d.trim();
+  };
+
+  const svg = svgFromString(`
+<svg class="chart-svg" viewBox="0 0 ${CHART_W} ${CHART_H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path class="chart-area chart-down" d="${areaPath('down')}"/>
+  <path class="chart-area chart-up"   d="${areaPath('up')}"/>
+  <path class="chart-line chart-down" d="${linePath('down')}"/>
+  <path class="chart-line chart-up"   d="${linePath('up')}"/>
+</svg>`);
+
+  const last = samples[n - 1];
+  return el('div', {
+    class: 'adapter-chart',
+    title: `Traffic — last ${n} samples\n` +
+           `now  ↓ ${formatBytes(last.down)}/s · ↑ ${formatBytes(last.up)}/s\n` +
+           `peak ${formatBytes(peak)}/s`
+  }, [
+    svg,
+    el('div', { class: 'chart-legend' }, [
+      el('span', { class: 'chart-key chart-down', text: 'Download' }),
+      el('span', { class: 'chart-key chart-up',   text: 'Upload' }),
+      el('span', { class: 'chart-peak', text: `peak ${formatBytes(peak)}/s` })
+    ])
+  ]);
+}
+
 // Formats a byte count as B/KB/MB/GB/TB with one decimal place beyond KB.
 function formatBytes(bytes) {
   if (bytes == null || isNaN(bytes)) return '';
@@ -87,14 +146,59 @@ function subnetTooltip(ipsWithPrefix) {
   return lines.join('\n');
 }
 
-export function mount(rootEl, { role, getState, onToggle, onError, onInfo }) {
+// Returns a sorted copy of the adapter list for the given '<field>-<dir>' key.
+// Traffic uses cumulative bytes (received + sent) — monotonic, so the order
+// stays stable across polls instead of reshuffling on every rate change.
+// Ties fall back to name so equal-traffic adapters keep a fixed order.
+function sortAdapters(adapters, sortKey) {
+  const [field, dir] = String(sortKey || 'name-asc').split('-');
+  const mul = dir === 'desc' ? -1 : 1;
+  const byName = (a, b) =>
+    String(a.Name).localeCompare(String(b.Name), undefined, { sensitivity: 'base', numeric: true });
+  return adapters.slice().sort((a, b) => {
+    if (field === 'traffic') {
+      const ta = Number(a.BytesReceived || 0) + Number(a.BytesSent || 0);
+      const tb = Number(b.BytesReceived || 0) + Number(b.BytesSent || 0);
+      return (ta === tb ? byName(a, b) : (ta - tb) * mul);
+    }
+    return byName(a, b) * mul;
+  });
+}
+
+// Builds the enable/disable switch shown at the top-right of every adapter
+// card (above the jack icon) — the same action as Enable/Disable in the
+// Windows Network Connections panel. The switch reflects adapter.Status
+// ('Disabled' => off) and triggers an elevated state change via onSetState.
+// Clicks are stopped from bubbling so flipping it never also selects the card.
+function renderToggle(adapter, busy, onSetState) {
+  const enabled = adapter.Status !== 'Disabled';
+
+  const input = el('input', { type: 'checkbox', class: 'switch-input' });
+  input.checked = enabled;
+  input.disabled = busy;
+  input.addEventListener('change', (e) => {
+    e.stopPropagation();
+    onSetState(adapter.Name, input.checked);
+  });
+
+  return el('label', {
+    class: 'adapter-switch',
+    title: enabled ? `Disable ${adapter.Name}` : `Enable ${adapter.Name}`,
+    onClick: (e) => e.stopPropagation()
+  }, [input, el('span', { class: 'switch-slider' })]);
+}
+
+export function mount(rootEl, { role, getState, onToggle, onSetState, onError, onInfo }) {
   const thisKey = role === 'public' ? 'selectedPublic' : 'selectedPrivate';
   const otherKey = role === 'public' ? 'selectedPrivate' : 'selectedPublic';
 
   function render() {
     const s = getState();
     rootEl.innerHTML = '';
-    for (const adapter of s.adapters) {
+    // Only the Internet Source list is sortable; the target list keeps the
+    // adapter order reported by Windows.
+    const list = role === 'public' ? sortAdapters(s.adapters, s.sourceSort) : s.adapters;
+    for (const adapter of list) {
       rootEl.appendChild(renderItem(adapter, s));
     }
   }
@@ -102,7 +206,10 @@ export function mount(rootEl, { role, getState, onToggle, onError, onInfo }) {
   function renderItem(adapter, s) {
     const isOther = s[otherKey] === adapter.Name;
     const isChecked = s[thisKey] === adapter.Name;
-    const disabled = isOther || s.busy;
+    const isStateDisabled = adapter.Status === 'Disabled';
+    // A disabled adapter can't carry shared internet, so it isn't selectable —
+    // only its enable toggle stays live.
+    const disabled = isOther || s.busy || isStateDisabled;
 
     const tags = [
       el('span', {
@@ -141,7 +248,13 @@ export function mount(rootEl, { role, getState, onToggle, onError, onInfo }) {
     children.push(el('div', { class: 'adapter-tags' }, tags));
 
     const meta = el('div', { class: 'adapter-meta' }, children);
-    const port = svgFromString(PORT_SVG);
+    // Right-hand column: enable/disable switch on top, RJ-45 jack below it.
+    // The switch is shown only in the Internet Source list — the Share To
+    // list shows the same adapters, so a second toggle would be a duplicate.
+    const side = el('div', { class: 'adapter-side' }, [
+      role === 'public' ? renderToggle(adapter, s.busy, onSetState) : null,
+      svgFromString(PORT_SVG)
+    ]);
 
     const linkUp = adapter.Status === 'Up';
     const totalRate = (adapter.RateDownBytesPerSec || 0) + (adapter.RateUpBytesPerSec || 0);
@@ -154,10 +267,18 @@ export function mount(rootEl, { role, getState, onToggle, onError, onInfo }) {
         'adapter-item',
         isChecked && 'selected',
         isOther && 'disabled',
+        isStateDisabled && 'state-disabled',
         linkUp && 'link-up',
         hasActivity && 'activity'
       ].filter(Boolean).join(' ')
-    }, [meta, port]);
+    }, [meta, side]);
+
+    // Per-adapter traffic chart spanning the full card width at the bottom.
+    // Shown only in the Internet Source list; disabled (and history dropped)
+    // when the chart interval is set to 0.
+    if (role === 'public' && linkUp && (s.settings?.chartIntervalSec ?? 0) > 0) {
+      li.appendChild(renderTrafficChart(adapter, s.trafficHistory?.[adapter.Name]));
+    }
 
     li.addEventListener('click', (e) => {
       e.stopPropagation();

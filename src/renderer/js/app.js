@@ -14,6 +14,14 @@ import * as hotspotModal  from './views/hotspotModal.js';
 
 const views = {};
 let refreshTimer = null;
+let chartTimer = null;
+
+// How many byte/sec samples each adapter's traffic chart retains.
+const TRAFFIC_HISTORY_MAX = 40;
+
+function chartEnabled() {
+  return (state.settings?.chartIntervalSec ?? 0) > 0;
+}
 
 // Surfaces a message in both the transient toast and the persistent activity
 // log. Use `log(msg, kind)` for log-only entries (e.g. status transitions).
@@ -31,32 +39,55 @@ function renderAll() {
   views.footer.render();
 }
 
+// Stamps SharingEnabled / SharingConnectionType on each adapter from the
+// resolved active pair, so the ICS Source / Target pills stay consistent even
+// on the high-frequency traffic poll (which does not run full reconciliation).
+function annotateSharingRoles(adapters) {
+  for (const a of adapters) {
+    const isSrc = state.sharingActive && a.Name === state.activePublic;
+    const isTgt = state.sharingActive && a.Name === state.activePrivate;
+    a.SharingEnabled = isSrc || isTgt;
+    a.SharingConnectionType = isSrc ? 0 : isTgt ? 1 : -1;
+  }
+}
+
 // Compares the latest live ICS state with the previous snapshot and decides
 // whether to follow the change in the on-screen toggles + raise a toast.
 function reconcileWithLiveState() {
   const live = state.adapters;
-  const pub  = live.find(a => a.SharingEnabled && a.SharingConnectionType === 0);
-  const priv = live.find(a => a.SharingEnabled && a.SharingConnectionType === 1);
+
+  // Target (private) = the adapter holding the ICS gateway IP; list-adapters.ps1
+  // detects this reliably. Source (public) detection is unreliable for VPN-
+  // tunnel uplinks that carry no default-gateway route, so when the app itself
+  // enabled sharing we fall back to the pair it recorded (state.activeShare).
+  let sourceName = state.detectedSource;
+  let targetName = state.detectedTarget;
+
+  const known = state.activeShare;
+  if (known && state.serviceRunning && (!targetName || targetName === known.target)) {
+    if (!targetName) targetName = known.target;
+    if (!sourceName) sourceName = known.source;
+  }
+
+  // ICS is active whenever its service runs and a gateway-holding target
+  // exists — this no longer depends on identifying the source.
+  const sharingActive = !!(state.serviceRunning && targetName);
 
   const prevPub    = state.activePublic;
   const prevPriv   = state.activePrivate;
   const prevActive = state.sharingActive;
 
-  state.activePublic  = pub  ? pub.Name  : null;
-  state.activePrivate = priv ? priv.Name : null;
-  state.sharingActive = !!(pub && priv);
+  state.activePublic  = sharingActive ? (sourceName || null) : null;
+  state.activePrivate = sharingActive ? (targetName || null) : null;
+  state.sharingActive = sharingActive;
+  annotateSharingRoles(live);
 
   const externalChange = state.initialDetectDone
     && (state.activePublic !== prevPub || state.activePrivate !== prevPriv);
 
   if (!state.initialDetectDone) {
-    if (state.sharingActive) {
-      state.selectedPublic  = pub.Name;
-      state.selectedPrivate = priv.Name;
-    } else if (pub || priv) {
-      if (pub)  state.selectedPublic  = pub.Name;
-      if (priv) state.selectedPrivate = priv.Name;
-    }
+    if (state.activePublic)  state.selectedPublic  = state.activePublic;
+    if (state.activePrivate) state.selectedPrivate = state.activePrivate;
   } else if (externalChange) {
     const userHadNotDiverged =
       state.selectedPublic === prevPub && state.selectedPrivate === prevPriv;
@@ -65,11 +96,11 @@ function reconcileWithLiveState() {
       state.selectedPrivate = state.activePrivate;
     }
     if (state.sharingActive && !prevActive) {
-      notify(`ICS enabled externally: ${state.activePublic} → ${state.activePrivate}`, 'success');
+      notify(`ICS active: ${state.activePublic || 'unknown source'} → ${state.activePrivate}`, 'success');
     } else if (!state.sharingActive && prevActive) {
-      notify('ICS was disabled outside the app', 'success');
+      notify('ICS is no longer active', 'success');
     } else if (state.sharingActive) {
-      notify(`ICS reconfigured externally: ${state.activePublic} → ${state.activePrivate}`, 'success');
+      notify(`ICS reconfigured: ${state.activePublic || 'unknown source'} → ${state.activePrivate}`, 'success');
     }
   }
 
@@ -77,15 +108,15 @@ function reconcileWithLiveState() {
 
   if (state.sharingActive) {
     views.statusBar.set(
-      `Sharing ACTIVE — ${pub.Name} → ${priv.Name}`,
+      `Sharing ACTIVE — ${state.activePublic || 'unknown source'} → ${state.activePrivate}`,
       `Internet Connection Sharing is currently enabled${scopeNote}.`,
       'active'
     );
-  } else if (pub || priv) {
-    const half = pub || priv;
-    const role = pub ? 'source' : 'target';
+  } else if (sourceName || targetName) {
+    const half = targetName || sourceName;
+    const role = targetName ? 'target' : 'source';
     views.statusBar.set(
-      `Sharing partially configured — ${half.Name} flagged as ${role}`,
+      `Sharing partially configured — ${half} flagged as ${role}`,
       'Pick the other side and start, or stop to clear the state.',
       'working'
     );
@@ -107,6 +138,7 @@ async function refresh() {
       showDisconnected: state.settings?.showDisconnected ?? false
     });
     annotateWithRates(payload.adapters, payload.sampledAtMs);
+    if (chartEnabled()) recordTrafficSample(payload.adapters);
     state.adapters       = payload.adapters;
     state.detectedSource = payload.sourceName;
     state.detectedTarget = payload.targetName;
@@ -186,6 +218,46 @@ function annotateWithRates(adapters, sampledAtMs) {
   state.prevSample = next;
 }
 
+// Appends the latest per-second rates to each adapter's rolling chart buffer
+// and discards buffers for adapters that have gone away. Adapters whose rate
+// is not yet known (first poll) are skipped so the chart never plots a guess.
+function recordTrafficSample(adapters) {
+  const hist = state.trafficHistory;
+  const live = new Set();
+  for (const a of adapters) {
+    live.add(a.Name);
+    if (a.RateDownBytesPerSec == null) continue;
+    const buf = hist[a.Name] || (hist[a.Name] = []);
+    buf.push({
+      down: Math.max(0, a.RateDownBytesPerSec || 0),
+      up:   Math.max(0, a.RateUpBytesPerSec   || 0)
+    });
+    if (buf.length > TRAFFIC_HISTORY_MAX) buf.splice(0, buf.length - TRAFFIC_HISTORY_MAX);
+  }
+  for (const name of Object.keys(hist)) {
+    if (!live.has(name)) delete hist[name];
+  }
+}
+
+// High-frequency poll dedicated to the traffic charts. Unlike refresh() it
+// skips ICS reconciliation, tray sync and client probing — it only needs
+// fresh byte counters to extend each adapter's history buffer and redraw.
+async function pollTraffic() {
+  if (state.busy || !chartEnabled()) return;
+  try {
+    const payload = await api.listAdapters({
+      showDisconnected: state.settings?.showDisconnected ?? false
+    });
+    annotateWithRates(payload.adapters, payload.sampledAtMs);
+    recordTrafficSample(payload.adapters);
+    state.adapters = payload.adapters;
+    annotateSharingRoles(state.adapters);
+    renderAll();
+  } catch (err) {
+    log('Traffic poll failed: ' + err.message, 'error');
+  }
+}
+
 async function startSharing() {
   if (!state.selectedPublic || !state.selectedPrivate) return;
   if (state.selectedPublic === state.selectedPrivate) {
@@ -203,6 +275,9 @@ async function startSharing() {
       privateName: state.selectedPrivate,
       elevate:     state.settings.elevateOnToggle
     });
+    // Record the live pair so reconcile can resolve the source even when the
+    // unprivileged poll can't (VPN-tunnel uplinks have no default-gateway route).
+    state.activeShare = { source: state.selectedPublic, target: state.selectedPrivate };
     notify(`Internet Connection Sharing enabled (${out || 'ok'})`, 'success');
   } catch (err) {
     views.statusBar.set('Failed to start sharing', err.message, 'error');
@@ -220,10 +295,54 @@ async function stopSharing() {
   log('Stopping ICS…', 'working');
   try {
     const out = await api.stopSharing({ elevate: state.settings.elevateOnToggle });
+    state.activeShare = null;
     notify(`Sharing stopped (${out})`, 'success');
   } catch (err) {
     views.statusBar.set('Failed to stop sharing', err.message, 'error');
     notify('Stop failed: ' + err.message, 'error');
+  } finally {
+    state.busy = false;
+    await refresh();
+  }
+}
+
+// Enables or disables an adapter — the elevated equivalent of the Windows
+// Network Connections Enable/Disable command. Mirrors start/stopSharing:
+// blocks the UI while the privileged script runs, then refreshes.
+async function toggleAdapter(name, enabled) {
+  if (state.busy) return;
+  state.busy = true;
+  renderAll();
+  const verb = enabled ? 'Enabling' : 'Disabling';
+  views.statusBar.set(`${verb} ${name}…`, 'Applying the adapter state change.', 'working');
+  log(`${verb} adapter ${name}…`, 'working');
+  try {
+    await api.setAdapterState({ adapterName: name, enabled });
+    notify(`Adapter ${name} ${enabled ? 'enabled' : 'disabled'}`, 'success');
+  } catch (err) {
+    notify(`Failed to ${enabled ? 'enable' : 'disable'} ${name}: ${err.message}`, 'error');
+  } finally {
+    state.busy = false;
+    await refresh();
+  }
+}
+
+// Recovers from a stuck ICS state — disables all sharing, drops stranded
+// 192.168.137.x gateway IPs left on dead Wi-Fi Direct adapters, and restarts
+// the ICS service. Elevated; mirrors start/stopSharing's busy + refresh flow.
+async function resetSharing() {
+  if (state.busy) return;
+  state.busy = true;
+  renderAll();
+  views.statusBar.set('Resetting ICS…', 'Clearing stale sharing state.', 'working');
+  log('Resetting ICS — disabling all sharing, clearing stale gateway IPs…', 'working');
+  try {
+    const out = await api.resetSharing({ elevate: true });
+    state.activeShare = null;
+    notify(`ICS reset (${out || 'ok'})`, 'success');
+  } catch (err) {
+    views.statusBar.set('Failed to reset ICS', err.message, 'error');
+    notify('Reset failed: ' + err.message, 'error');
   } finally {
     state.busy = false;
     await refresh();
@@ -236,9 +355,24 @@ function scheduleAutoRefresh() {
   if (sec > 0) refreshTimer = setInterval(refresh, sec * 1000);
 }
 
+// Drives the per-adapter traffic charts. An interval of 0 disables the chart
+// entirely — the timer is cleared and accumulated history dropped so the
+// cards re-render without a chart.
+function scheduleChartRefresh() {
+  clearInterval(chartTimer);
+  chartTimer = null;
+  const sec = state.settings?.chartIntervalSec ?? 0;
+  if (sec > 0) {
+    chartTimer = setInterval(pollTraffic, sec * 1000);
+  } else {
+    state.trafficHistory = {};
+  }
+}
+
 async function saveOptions(updated) {
   state.settings = await api.setSettings(updated);
   scheduleAutoRefresh();
+  scheduleChartRefresh();
   views.consolePanel.setVisible(state.settings.showConsole !== false);
   notify('Settings saved', 'success');
   await refresh();
@@ -256,9 +390,11 @@ async function init() {
   api.onTrayAction((action) => {
     if (!action) return;
     if (action.type === 'started') {
+      state.activeShare = { source: action.pair.publicName, target: action.pair.privateName };
       notify(`Sharing started from tray: ${action.pair.publicName} → ${action.pair.privateName}`, 'success');
       refresh();
     } else if (action.type === 'stopped') {
+      state.activeShare = null;
       notify('Sharing stopped from tray', 'success');
       refresh();
     } else if (action.type === 'error') {
@@ -276,6 +412,7 @@ async function init() {
       state.selectedPublic = state.selectedPublic === name ? null : name;
       renderAll();
     },
+    onSetState: toggleAdapter,
     onError: onPropertiesError,
     onInfo: onPropertiesInfo
   });
@@ -287,6 +424,7 @@ async function init() {
       state.selectedPrivate = state.selectedPrivate === name ? null : name;
       renderAll();
     },
+    onSetState: toggleAdapter,
     onError: onPropertiesError,
     onInfo: onPropertiesInfo
   });
@@ -294,7 +432,8 @@ async function init() {
   views.footer = footer.mount(document.querySelector('.app-footer'), {
     getState: () => state,
     onStart:  startSharing,
-    onStop:   stopSharing
+    onStop:   stopSharing,
+    onReset:  resetSharing
   });
 
   views.options = optionsModal.mount(document.getElementById('options-overlay'), {
@@ -306,16 +445,27 @@ async function init() {
     onError: (msg) => notify(msg, 'error')
   });
 
+  const sortPublic = document.getElementById('sort-public');
+  sortPublic.value = state.sourceSort;
+  sortPublic.addEventListener('change', () => {
+    state.sourceSort = sortPublic.value;
+    views.publicColumn.render();
+  });
+
   document.getElementById('btn-refresh').addEventListener('click', refresh);
   document.getElementById('btn-options').addEventListener('click', () => views.options.open(state.settings));
   document.getElementById('btn-hotspot').addEventListener('click', () => views.hotspot.open());
 
   state.settings = await api.getSettings();
+  // Carry a previously recorded ICS pair across restarts so the source is
+  // known even if the app was closed while sharing was active.
+  state.activeShare = state.settings.activeShare || null;
   views.consolePanel.setVisible(state.settings.showConsole !== false);
   views.statusBar.set('Detecting current state…', 'Reading network adapters and ICS configuration.', 'working');
   log('Detecting current ICS state…', 'working');
   await refresh();
   scheduleAutoRefresh();
+  scheduleChartRefresh();
 }
 
 init();

@@ -122,6 +122,31 @@ body {
 .col-header h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; }
 .col-hint { color: var(--text-muted); font-size: 11px; }
 
+.col-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.col-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.col-sort select {
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.col-sort select:focus { outline: none; border-color: var(--accent); }
+
 .adapter-list {
   list-style: none;
   margin: 0;
@@ -129,11 +154,20 @@ body {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  /* Fixed-width card tiles: the track minimum is a constant so the column
+     count never shifts as traffic text changes length. min(..., 100%) keeps a
+     card from overflowing a narrow pane; auto-fill drops to one column when
+     two no longer fit. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 6px;
+  align-content: start;
 }
 
 .adapter-list:empty::after {
   content: 'No adapters found';
   display: block;
+  grid-column: 1 / -1;
   padding: 24px;
   text-align: center;
   color: var(--text-muted);
@@ -143,11 +177,10 @@ body {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
-  align-items: center;
+  align-items: start;
   padding: 10px 12px;
   border: 1px solid transparent;
   border-radius: 6px;
-  margin-bottom: 4px;
   background: var(--bg-elev-2);
   cursor: pointer;
   transition: background 120ms, border-color 120ms;
@@ -156,6 +189,60 @@ body {
 .adapter-item:hover { background: #353541; }
 .adapter-item.selected { border-color: var(--accent); background: #2c3a55; }
 .adapter-item.disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Administratively disabled adapter: card body greyed out, but the toggle row
+   stays fully lit and interactive so it can be switched back on. */
+.adapter-item.state-disabled { cursor: default; }
+.adapter-item.state-disabled .adapter-meta,
+.adapter-item.state-disabled .port { opacity: 0.35; }
+
+/* Right-hand column: enable/disable switch stacked above the RJ-45 jack,
+   top-aligned so the switch sits on the same line as the adapter name. */
+.adapter-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.adapter-switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 34px;
+  height: 18px;
+  cursor: pointer;
+}
+.adapter-switch .switch-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 999px;
+  transition: background 140ms;
+}
+.switch-slider::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  background: #e8e8ee;
+  border-radius: 50%;
+  transition: transform 140ms;
+}
+.switch-input:checked + .switch-slider { background: var(--green); }
+.switch-input:checked + .switch-slider::before { transform: translateX(16px); }
+.switch-input:disabled + .switch-slider { opacity: 0.5; cursor: not-allowed; }
+.switch-input:focus-visible + .switch-slider { box-shadow: 0 0 0 2px var(--accent); }
 
 .adapter-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .adapter-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -168,19 +255,78 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Stacked, single-line-each so the block is always exactly two lines tall —
+   keeps card height constant regardless of how long the rate text is. */
 .adapter-traffic {
   display: flex;
-  flex-wrap: wrap;
-  column-gap: 12px;
+  flex-direction: column;
   row-gap: 2px;
   font-family: 'Consolas', 'Cascadia Mono', ui-monospace, monospace;
   font-size: 11px;
   color: var(--text-muted);
 }
+.adapter-traffic .rate,
+.adapter-traffic .total {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .adapter-traffic .rate  { color: var(--text); opacity: 0.9; }
 .adapter-traffic .total { font-size: 10px; }
 .adapter-desc { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .adapter-tags { display: flex; gap: 6px; margin-top: 2px; }
+
+/* Per-adapter traffic chart — spans both grid columns at the bottom of the card. */
+.adapter-chart {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.adapter-chart.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Match the rendered chart's height (svg + legend) so the card does not
+     resize when the first samples arrive. */
+  min-height: 50px;
+}
+.adapter-chart .chart-hint { font-size: 10px; color: var(--text-muted); font-style: italic; }
+.chart-svg { display: block; width: 100%; height: 34px; }
+.chart-area { stroke: none; }
+.chart-line {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.chart-down.chart-area { fill: rgba(79, 140, 255, 0.22); }
+.chart-down.chart-line { stroke: var(--accent); }
+.chart-up.chart-area   { fill: rgba(232, 179, 65, 0.20); }
+.chart-up.chart-line   { stroke: var(--yellow); }
+.chart-legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.chart-key::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+.chart-key.chart-down::before { background: var(--accent); }
+.chart-key.chart-up::before   { background: var(--yellow); }
+.chart-peak {
+  margin-left: auto;
+  font-family: 'Consolas', 'Cascadia Mono', ui-monospace, monospace;
+}
 .tag {
   font-size: 10px;
   padding: 2px 6px;

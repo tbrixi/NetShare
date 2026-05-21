@@ -10,6 +10,8 @@ const STOP_SCRIPT    = path.join(SCRIPTS_DIR, 'stop-sharing.ps1');
 const SET_SCRIPT     = path.join(SCRIPTS_DIR, 'set-sharing.ps1');
 const PROPS_SCRIPT   = path.join(SCRIPTS_DIR, 'open-adapter-properties.ps1');
 const CLIENTS_SCRIPT = path.join(SCRIPTS_DIR, 'list-clients.ps1');
+const STATE_SCRIPT   = path.join(SCRIPTS_DIR, 'set-adapter-state.ps1');
+const RESET_SCRIPT   = path.join(SCRIPTS_DIR, 'reset-sharing.ps1');
 
 async function listAdapters({ showDisconnected = false } = {}) {
   const { stdout } = await runScript(LIST_SCRIPT);
@@ -22,7 +24,9 @@ async function listAdapters({ showDisconnected = false } = {}) {
     ? payload.Adapters
     : (payload.Adapters ? [payload.Adapters] : []);
   if (!showDisconnected) {
-    adapters = adapters.filter(a => a.Status === 'Up' || a.SharingEnabled);
+    // Disabled adapters are always kept so their enable toggle stays reachable.
+    adapters = adapters.filter(a =>
+      a.Status === 'Up' || a.Status === 'Disabled' || a.SharingEnabled);
   }
   return {
     adapters,
@@ -70,4 +74,27 @@ async function listClients({ targetAdapter, gatewayIp }) {
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
-module.exports = { listAdapters, startSharing, stopSharing, openAdapterProperties, listClients };
+// Enables or disables an adapter (Enable-/Disable-NetAdapter). Always elevated
+// — the cmdlets require Administrator, the same as the Windows control panel.
+async function setAdapterState({ adapterName, enabled }) {
+  if (!adapterName) throw new Error('Adapter name required');
+  const { stdout } = await runScript(
+    STATE_SCRIPT,
+    ['-AdapterName', adapterName, '-Action', enabled ? 'Enable' : 'Disable'],
+    { elevate: true }
+  );
+  return stdout.trim();
+}
+
+// Resets ICS to a clean slate (disable all sharing, drop stranded gateway IPs,
+// restart the ICS service). Always elevated. Recovers from a stuck state where
+// 192.168.137.1 is stranded on a leftover Wi-Fi Direct virtual adapter.
+async function resetSharing({ elevate = true } = {}) {
+  const { stdout } = await runScript(RESET_SCRIPT, [], { elevate });
+  return stdout.trim();
+}
+
+module.exports = {
+  listAdapters, startSharing, stopSharing, openAdapterProperties, listClients,
+  setAdapterState, resetSharing
+};

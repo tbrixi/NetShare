@@ -3,6 +3,7 @@
 
 export function mount(overlayEl, { onSave }) {
   const refresh      = overlayEl.querySelector('#opt-refresh');
+  const chart        = overlayEl.querySelector('#opt-chart');
   const disconnected = overlayEl.querySelector('#opt-disconnected');
   const elevate      = overlayEl.querySelector('#opt-elevate');
   const consoleVis   = overlayEl.querySelector('#opt-console');
@@ -13,6 +14,7 @@ export function mount(overlayEl, { onSave }) {
   overlayEl.querySelector('#btn-options-save').addEventListener('click', () => {
     onSave({
       refreshIntervalSec: Math.max(0, parseInt(refresh.value, 10) || 0),
+      chartIntervalSec:   Math.max(0, parseInt(chart.value, 10) || 0),
       showDisconnected:   disconnected.checked,
       elevateOnToggle:    elevate.checked,
       showConsole:        consoleVis.checked,
@@ -27,6 +29,7 @@ export function mount(overlayEl, { onSave }) {
 
   function open(settings) {
     refresh.value        = settings.refreshIntervalSec;
+    chart.value          = settings.chartIntervalSec ?? 5;
     disconnected.checked = settings.showDisconnected;
     elevate.checked      = settings.elevateOnToggle;
     consoleVis.checked   = settings.showConsole !== false;

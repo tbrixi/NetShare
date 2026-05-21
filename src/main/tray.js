@@ -66,6 +66,7 @@ async function trayStartLast() {
   if (!lastPair) return;
   try {
     await ics.startSharing({ ...lastPair, elevate: true });
+    settings.save(app, { activeShare: { source: lastPair.publicName, target: lastPair.privateName } });
     notifyRenderer('tray:action', { type: 'started', pair: lastPair });
   } catch (err) {
     notifyRenderer('tray:action', { type: 'error', message: err.message });
@@ -75,6 +76,7 @@ async function trayStartLast() {
 async function trayStop() {
   try {
     await ics.stopSharing({ elevate: true });
+    settings.save(app, { activeShare: null });
     notifyRenderer('tray:action', { type: 'stopped' });
   } catch (err) {
     notifyRenderer('tray:action', { type: 'error', message: err.message });

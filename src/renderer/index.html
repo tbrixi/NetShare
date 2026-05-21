@@ -34,7 +34,18 @@
   <main class="columns">
     <section class="col" data-role="public">
       <header class="col-header">
-        <h2>Internet Source</h2>
+        <div class="col-header-row">
+          <h2>Internet Source</h2>
+          <label class="col-sort">
+            Sort
+            <select id="sort-public" title="Sort the Internet Source list">
+              <option value="name-asc">Name A–Z</option>
+              <option value="name-desc">Name Z–A</option>
+              <option value="traffic-desc">Traffic high→low</option>
+              <option value="traffic-asc">Traffic low→high</option>
+            </select>
+          </label>
+        </div>
         <span class="col-hint">Adapter that has internet (will be shared)</span>
       </header>
       <ul id="list-public" class="adapter-list"></ul>
@@ -64,6 +75,8 @@
       <span class="pill pill-private">Target: <strong id="sel-private">—</strong></span>
     </div>
     <div class="footer-actions">
+      <button id="btn-reset" class="btn btn-ghost"
+              title="Repair stuck sharing: disable all ICS, clear stale gateway IPs, restart the ICS service">⟲ Reset ICS</button>
       <button id="btn-start" class="btn btn-primary" disabled>▶ Start Sharing</button>
       <button id="btn-stop" class="btn btn-danger">■ Stop Sharing</button>
     </div>
@@ -92,6 +105,12 @@
           <span>Auto-refresh interval (seconds)</span>
           <input type="number" id="opt-refresh" min="0" max="120" step="1" />
           <small>0 disables auto-refresh.</small>
+        </label>
+
+        <label class="field">
+          <span>Traffic chart refresh interval (seconds)</span>
+          <input type="number" id="opt-chart" min="0" max="60" step="1" />
+          <small>0 disables the per-adapter traffic chart.</small>
         </label>
 
         <label class="field-row">
