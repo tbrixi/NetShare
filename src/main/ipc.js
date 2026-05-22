@@ -8,6 +8,7 @@ function register(app) {
   ipcMain.handle('adapters:list', (_evt, args) => ics.listAdapters(args || {}));
   ipcMain.handle('adapter:properties', (_evt, args) => ics.openAdapterProperties(args || {}));
   ipcMain.handle('adapter:setState', (_evt, args) => ics.setAdapterState(args || {}));
+  ipcMain.handle('adapter:speedTest', (_evt, args) => ics.runSpeedTest(args || {}));
   ipcMain.handle('clients:list', (_evt, args) => ics.listClients(args || {}));
 
   ipcMain.handle('hotspot:get',       () => hotspot.getHotspot());

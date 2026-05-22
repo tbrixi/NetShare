@@ -16,6 +16,7 @@ export const state = {
 
   prevSample: null,  // { ts, perAdapter: { name -> { sent, received } } } from the previous poll
   trafficHistory: {},  // adapterName -> [{ down, up }] rolling byte/sec samples feeding the per-adapter chart
+  speedTest: null,  // { status: 'running'|'done'|'error', adapter, downMbps, upMbps, pingMs, error, at } — last/in-flight internet speed test
   clients: [],
   clientsLoading: false,
   initialDetectDone: false,

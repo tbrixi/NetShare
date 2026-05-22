@@ -349,6 +349,55 @@ async function resetSharing() {
   }
 }
 
+// Runs an on-demand internet speed test for the active internet source and
+// shows the result on the status bar's dedicated speed line. Deliberately
+// does NOT set state.busy — the test takes ~10-30s and the rest of the UI
+// (polling, charts) should stay live.
+async function runSpeedTest() {
+  if (state.speedTest && state.speedTest.status === 'running') return;
+
+  // Target the active ICS source; before sharing is started, fall back to any
+  // internet-connected adapter so the button is still useful.
+  const srcName = state.activePublic
+    || (state.adapters.find((a) => a.HasInternet) || {}).Name
+    || null;
+  if (!srcName) {
+    state.speedTest = { status: 'error', adapter: null, error: 'No internet source detected.' };
+    views.statusBar.setSpeed(state.speedTest);
+    notify('Speed test: no internet source detected', 'error');
+    return;
+  }
+  const srcAdapter = state.adapters.find((a) => a.Name === srcName);
+  const sourceIp = srcAdapter
+    ? String(srcAdapter.IPv4Address || '').split(',')[0].trim()
+    : '';
+
+  const btn = document.getElementById('btn-speedtest');
+  state.speedTest = { status: 'running', adapter: srcName };
+  views.statusBar.setSpeed(state.speedTest);
+  if (btn) btn.disabled = true;
+  log(`Speed test started for ${srcName} — measuring internet throughput…`, 'working');
+  try {
+    const r = await api.runSpeedTest({ sourceIp });
+    state.speedTest = {
+      status: 'done',
+      adapter: srcName,
+      downMbps: r.DownMbps,
+      upMbps: r.UpMbps,
+      pingMs: r.PingMs,
+      at: Date.now()
+    };
+    const ping = r.PingMs != null ? ` · ${r.PingMs} ms` : '';
+    notify(`Speed test ${srcName}: ↓ ${r.DownMbps} Mbps · ↑ ${r.UpMbps} Mbps${ping}`, 'success');
+  } catch (err) {
+    state.speedTest = { status: 'error', adapter: srcName, error: err.message };
+    notify(`Speed test failed for ${srcName}: ${err.message}`, 'error');
+  } finally {
+    views.statusBar.setSpeed(state.speedTest);
+    if (btn) btn.disabled = false;
+  }
+}
+
 function scheduleAutoRefresh() {
   clearInterval(refreshTimer);
   const sec = state.settings?.refreshIntervalSec ?? 0;
@@ -453,6 +502,7 @@ async function init() {
   });
 
   document.getElementById('btn-refresh').addEventListener('click', refresh);
+  document.getElementById('btn-speedtest').addEventListener('click', runSpeedTest);
   document.getElementById('btn-options').addEventListener('click', () => views.options.open(state.settings));
   document.getElementById('btn-hotspot').addEventListener('click', () => views.hotspot.open());
 

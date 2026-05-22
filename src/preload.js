@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('netshare', {
   listClients:           (args)    => ipcRenderer.invoke('clients:list', args || {}),
   openAdapterProperties: (args)    => ipcRenderer.invoke('adapter:properties', args || {}),
   setAdapterState:       (args)    => ipcRenderer.invoke('adapter:setState', args || {}),
+  runSpeedTest:          (args)    => ipcRenderer.invoke('adapter:speedTest', args || {}),
   startSharing:          (args)    => ipcRenderer.invoke('sharing:start', args || {}),
   stopSharing:           (args)    => ipcRenderer.invoke('sharing:stop',  args || {}),
   resetSharing:          (args)    => ipcRenderer.invoke('sharing:reset', args || {}),

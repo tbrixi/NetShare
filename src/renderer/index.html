@@ -16,6 +16,8 @@
     </div>
     <div class="header-actions">
       <button id="btn-refresh" class="btn btn-ghost" title="Refresh adapters">↻ Refresh</button>
+      <button id="btn-speedtest" class="btn btn-ghost"
+              title="Measure internet download/upload speed of the active source">⚡ Speed Test</button>
       <button id="btn-hotspot" class="btn btn-ghost">📶 Hotspot</button>
       <button id="btn-options" class="btn btn-ghost">⚙ Options</button>
     </div>
@@ -28,6 +30,10 @@
     </div>
     <div class="status-line muted">
       <span id="status-detail">Select an internet source on the left and a target adapter on the right.</span>
+    </div>
+    <div id="status-speed-line" class="status-line status-speed-line hidden">
+      <span class="status-label">Speed test:</span>
+      <span id="status-speed" class="status-speed-value"></span>
     </div>
   </section>
 

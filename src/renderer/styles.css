@@ -95,6 +95,27 @@ body {
 .status-line.muted { color: var(--text-muted); font-size: 12px; }
 .status-label { font-weight: 600; color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
 
+/* Dedicated internet speed-test line — fed by statusBar.setSpeed(), separate
+   from the two ICS-status lines so a refresh poll never clobbers the result. */
+.status-speed-line { margin-top: 2px; }
+.status-speed-line.hidden { display: none; }
+.status-speed-value {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 14px;
+  font-family: 'Consolas', 'Cascadia Mono', ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text);
+}
+.status-speed-value.running { font-family: inherit; font-size: 12px; font-style: italic; color: var(--text-muted); }
+.status-speed-value.error   { font-family: inherit; font-size: 12px; color: var(--red); }
+.status-speed-value .sp-adapter { font-weight: 600; color: var(--text); }
+.status-speed-value .sp-dl { color: var(--accent); }
+.status-speed-value .sp-ul { color: var(--yellow); }
+.status-speed-value .sp-pg { color: var(--text-muted); }
+.status-speed-value .sp-at { color: var(--text-muted); font-size: 11px; }
+
 .columns {
   display: grid;
   grid-template-columns: 1fr 1fr;

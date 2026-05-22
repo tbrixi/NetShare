@@ -12,6 +12,7 @@ const PROPS_SCRIPT   = path.join(SCRIPTS_DIR, 'open-adapter-properties.ps1');
 const CLIENTS_SCRIPT = path.join(SCRIPTS_DIR, 'list-clients.ps1');
 const STATE_SCRIPT   = path.join(SCRIPTS_DIR, 'set-adapter-state.ps1');
 const RESET_SCRIPT   = path.join(SCRIPTS_DIR, 'reset-sharing.ps1');
+const SPEED_SCRIPT   = path.join(SCRIPTS_DIR, 'speed-test.ps1');
 
 async function listAdapters({ showDisconnected = false } = {}) {
   const { stdout } = await runScript(LIST_SCRIPT);
@@ -94,7 +95,23 @@ async function resetSharing({ elevate = true } = {}) {
   return stdout.trim();
 }
 
+// Measures the real internet download/upload throughput of the machine's
+// uplink against Cloudflare's public speed-test endpoints. Runs unelevated —
+// no admin needed. `sourceIp` (optional) pins the test to a given adapter's
+// local address. Takes ~10-30s depending on the link; the caller should not
+// block its UI on it.
+async function runSpeedTest({ sourceIp } = {}) {
+  const args = [];
+  if (sourceIp) args.push('-SourceIP', String(sourceIp));
+  const { stdout } = await runScript(SPEED_SCRIPT, args);
+  const trimmed = stdout.trim();
+  if (!trimmed) throw new Error('Speed test produced no output');
+  const result = JSON.parse(trimmed);
+  if (!result.Ok) throw new Error(result.Error || 'Speed test failed');
+  return result;
+}
+
 module.exports = {
   listAdapters, startSharing, stopSharing, openAdapterProperties, listClients,
-  setAdapterState, resetSharing
+  setAdapterState, resetSharing, runSpeedTest
 };
