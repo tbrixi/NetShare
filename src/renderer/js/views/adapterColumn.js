@@ -165,6 +165,18 @@ function sortAdapters(adapters, sortKey) {
   });
 }
 
+// Returns a copy of the adapter list with the active ICS target hoisted to
+// the top, so the "Share To" column always shows the adapter currently
+// receiving shared internet first. The relative order of the rest is kept.
+function activeFirst(adapters, activeName) {
+  if (!activeName) return adapters.slice();
+  return adapters.slice().sort((a, b) => {
+    const aActive = a.Name === activeName ? 0 : 1;
+    const bActive = b.Name === activeName ? 0 : 1;
+    return aActive - bActive;
+  });
+}
+
 // Builds the enable/disable switch shown at the top-right of every adapter
 // card (above the jack icon) — the same action as Enable/Disable in the
 // Windows Network Connections panel. The switch reflects adapter.Status
@@ -195,9 +207,12 @@ export function mount(rootEl, { role, getState, onToggle, onSetState, onError, o
   function render() {
     const s = getState();
     rootEl.innerHTML = '';
-    // Only the Internet Source list is sortable; the target list keeps the
-    // adapter order reported by Windows.
-    const list = role === 'public' ? sortAdapters(s.adapters, s.sourceSort) : s.adapters;
+    // The Internet Source list is sortable; the "Share To" list keeps the
+    // adapter order reported by Windows but hoists the active ICS target to
+    // the top so the adapter currently in use is always first.
+    const list = role === 'public'
+      ? sortAdapters(s.adapters, s.sourceSort)
+      : activeFirst(s.adapters, s.activePrivate);
     for (const adapter of list) {
       rootEl.appendChild(renderItem(adapter, s));
     }
@@ -273,10 +288,12 @@ export function mount(rootEl, { role, getState, onToggle, onSetState, onError, o
       ].filter(Boolean).join(' ')
     }, [meta, side]);
 
-    // Per-adapter traffic chart spanning the full card width at the bottom.
-    // Shown only in the Internet Source list; disabled (and history dropped)
-    // when the chart interval is set to 0.
-    if (role === 'public' && linkUp && (s.settings?.chartIntervalSec ?? 0) > 0) {
+    // Traffic chart at the bottom of the card. Internet Source list: every
+    // adapter. Share To list: only the adapter currently receiving shared
+    // internet (the active ICS target). Disabled when the chart interval is 0.
+    const chartOn = (s.settings?.chartIntervalSec ?? 0) > 0;
+    const showChart = chartOn && (role === 'public' || adapter.Name === s.activePrivate);
+    if (showChart) {
       li.appendChild(renderTrafficChart(adapter, s.trafficHistory?.[adapter.Name]));
     }
 
