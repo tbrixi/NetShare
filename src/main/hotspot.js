@@ -9,10 +9,11 @@ const SCRIPTS_DIR = path
   .join(__dirname, '..', 'scripts')
   .replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
 
-const GET_SCRIPT   = path.join(SCRIPTS_DIR, 'hotspot-get.ps1');
-const SET_SCRIPT   = path.join(SCRIPTS_DIR, 'hotspot-set.ps1');
-const START_SCRIPT = path.join(SCRIPTS_DIR, 'hotspot-start.ps1');
-const STOP_SCRIPT  = path.join(SCRIPTS_DIR, 'hotspot-stop.ps1');
+const GET_SCRIPT      = path.join(SCRIPTS_DIR, 'hotspot-get.ps1');
+const SET_SCRIPT      = path.join(SCRIPTS_DIR, 'hotspot-set.ps1');
+const START_SCRIPT    = path.join(SCRIPTS_DIR, 'hotspot-start.ps1');
+const STOP_SCRIPT     = path.join(SCRIPTS_DIR, 'hotspot-stop.ps1');
+const RADIO_ON_SCRIPT = path.join(SCRIPTS_DIR, 'wifi-radio-on.ps1');
 
 async function getHotspot() {
   const { stdout } = await runScript(GET_SCRIPT);
@@ -36,9 +37,28 @@ async function configureHotspot({ ssid, passphrase, band }) {
   return stdout.trim();
 }
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function startHotspot() {
-  const { stdout } = await runScript(START_SCRIPT);
-  return stdout.trim();
+  // The hotspot broadcasts via the Wi-Fi adapter, so its radio must be on —
+  // otherwise StartTetheringAsync fails with WiFiDeviceOff. Turn it on (a
+  // no-op if already on), then start tethering, retrying while the Wi-Fi
+  // device is still coming up: it reports WiFiDeviceOff / InTransition for a
+  // few seconds after the radio switches on. Other errors fail immediately.
+  await runScript(RADIO_ON_SCRIPT);
+
+  let lastErr;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    await delay(attempt === 1 ? 1500 : 2500);
+    try {
+      const { stdout } = await runScript(START_SCRIPT);
+      return stdout.trim();
+    } catch (err) {
+      lastErr = err;
+      if (!/WiFiDeviceOff|InTransition/i.test(err.message)) throw err;
+    }
+  }
+  throw lastErr;
 }
 
 async function stopHotspot() {

@@ -35,10 +35,14 @@ made from the Network & Sharing Center).
   upload throughput and latency of the active internet source against
   Cloudflare's public speed-test endpoints, and shows the result on a
   dedicated status-bar line. Runs unelevated and non-blocking, so polling and
-  charts stay live during the measurement.
+  charts stay live during the measurement. The test binds to the selected
+  source adapter, and transparently falls back to the machine's default route
+  when that adapter's address isn't directly bindable (common for VPN tunnel
+  adapters like NordLynx / WireGuard).
 - **Mobile Hotspot control** — a built-in dialog configures and toggles the
   Windows Mobile Hotspot (SSID, password, 2.4/5 GHz band) and shows connected
-  client counts.
+  client counts. Starting the hotspot automatically powers on the Wi-Fi radio
+  first (the hotspot broadcasts over it) and retries while the adapter spins up.
 - **Universal IP handling** — the ICS gateway IP is read from
   `HKLM:\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\ScopeAddress`,
   so the app works on any machine regardless of whether the user has changed
@@ -48,6 +52,18 @@ made from the Network & Sharing Center).
   All toggling goes through the Windows `HNetCfg.HNetShare` COM API. A
   **Reset ICS** action repairs a stuck state (clears stranded gateway IPs,
   restarts the ICS service).
+- **Actionable failure messages** — when Windows refuses to enable sharing
+  (the opaque `0x80040201` "all subscribers failed" HRESULT), the app
+  diagnoses the real cause and says so: a tunnel source adapter ICS can't NAT
+  (WireGuard/Wintun), or the single system-wide ICS NAT instance already being
+  held by the Hyper-V "Default Switch" / WSL2. The SharedAccess service is also
+  auto-started if it was stopped or disabled.
+- **Saved profiles** — pick a Source + Target pair and click
+  `＋ Save as profile` to store the combination under a name; saved profiles
+  appear in a dropdown on the footer and re-apply the pair in one click.
+  The last profile you used is pre-selected on the next launch (unless ICS
+  is already active with a different pair — live state wins). Stored in
+  `settings.json` alongside other preferences.
 - **UAC elevation only when needed** — listing adapters and reading ICS state
   works without admin. Enabling/disabling sharing requires admin, so the app
   prompts for elevation only at the moment you click Start or Stop (toggle

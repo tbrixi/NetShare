@@ -21,6 +21,8 @@ export const state = {
   clientsLoading: false,
   initialDetectDone: false,
   sourceSort: 'traffic-desc',  // sort order for the Internet Source list: '<name|traffic>-<asc|desc>'
+  profiles: [],             // saved Source/Target pairs shown in the footer dropdown
+  lastProfileId: null,      // id of the most recently applied/saved profile; restored on app start
   settings: null,
   busy: false
 };

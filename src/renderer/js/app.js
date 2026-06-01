@@ -389,6 +389,9 @@ async function runSpeedTest() {
     };
     const ping = r.PingMs != null ? ` · ${r.PingMs} ms` : '';
     notify(`Speed test ${srcName}: ↓ ${r.DownMbps} Mbps · ↑ ${r.UpMbps} Mbps${ping}`, 'success');
+    if (sourceIp && r.Bound === false) {
+      log(`Speed test ${srcName}: adapter could not be pinned (typical for VPN tunnels) — measured over the default route.`);
+    }
   } catch (err) {
     state.speedTest = { status: 'error', adapter: srcName, error: err.message };
     notify(`Speed test failed for ${srcName}: ${err.message}`, 'error');
@@ -415,6 +418,55 @@ function scheduleChartRefresh() {
     chartTimer = setInterval(pollTraffic, sec * 1000);
   } else {
     state.trafficHistory = {};
+  }
+}
+
+async function loadProfile(id) {
+  const p = state.profiles.find((x) => x.id === id);
+  if (!p) return;
+  state.selectedPublic  = p.source;
+  state.selectedPrivate = p.target;
+  state.lastProfileId   = id;
+  renderAll();
+  try {
+    await api.setSettings({ lastProfileId: id });
+  } catch (err) {
+    log('Failed to record last profile: ' + err.message, 'error');
+  }
+  log(`Profile loaded: ${p.name}`);
+}
+
+async function saveProfile(name) {
+  if (!state.selectedPublic || !state.selectedPrivate) return;
+  const id = (crypto.randomUUID && crypto.randomUUID()) || `p-${state.profiles.length + 1}-${name}`;
+  const profile = { id, name, source: state.selectedPublic, target: state.selectedPrivate };
+  const profiles = [...state.profiles, profile];
+  try {
+    const updated = await api.setSettings({ profiles, lastProfileId: id });
+    state.settings      = updated;
+    state.profiles      = updated.profiles || [];
+    state.lastProfileId = updated.lastProfileId || null;
+    notify(`Profile "${name}" saved`, 'success');
+    renderAll();
+  } catch (err) {
+    notify('Failed to save profile: ' + err.message, 'error');
+  }
+}
+
+async function deleteProfile(id) {
+  const p = state.profiles.find((x) => x.id === id);
+  if (!p) return;
+  const profiles = state.profiles.filter((x) => x.id !== id);
+  const lastProfileId = state.lastProfileId === id ? null : state.lastProfileId;
+  try {
+    const updated = await api.setSettings({ profiles, lastProfileId });
+    state.settings      = updated;
+    state.profiles      = updated.profiles || [];
+    state.lastProfileId = updated.lastProfileId || null;
+    notify(`Profile "${p.name}" deleted`, 'success');
+    renderAll();
+  } catch (err) {
+    notify('Failed to delete profile: ' + err.message, 'error');
   }
 }
 
@@ -482,7 +534,10 @@ async function init() {
     getState: () => state,
     onStart:  startSharing,
     onStop:   stopSharing,
-    onReset:  resetSharing
+    onReset:  resetSharing,
+    onLoadProfile:   loadProfile,
+    onSaveProfile:   saveProfile,
+    onDeleteProfile: deleteProfile
   });
 
   views.options = optionsModal.mount(document.getElementById('options-overlay'), {
@@ -510,6 +565,16 @@ async function init() {
   // Carry a previously recorded ICS pair across restarts so the source is
   // known even if the app was closed while sharing was active.
   state.activeShare = state.settings.activeShare || null;
+  state.profiles      = state.settings.profiles      || [];
+  state.lastProfileId = state.settings.lastProfileId || null;
+  // Pre-select the last used profile. If sharing is already active when refresh
+  // runs, reconcileWithLiveState's initial-detect branch will override these
+  // with the live pair — that's correct (reality beats a stale profile).
+  const lastProfile = state.profiles.find((p) => p.id === state.lastProfileId);
+  if (lastProfile) {
+    state.selectedPublic  = lastProfile.source;
+    state.selectedPrivate = lastProfile.target;
+  }
   views.consolePanel.setVisible(state.settings.showConsole !== false);
   views.statusBar.set('Detecting current state…', 'Reading network adapters and ICS configuration.', 'working');
   log('Detecting current ICS state…', 'working');

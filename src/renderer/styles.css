@@ -1,4 +1,8 @@
 :root {
+  /* Tells Chromium the page is dark so native form controls (select popups,
+     scroll thumbs, focus rings, etc.) render in dark variants instead of the
+     OS light default. */
+  color-scheme: dark;
   --bg: #1e1e23;
   --bg-elev: #26262d;
   --bg-elev-2: #2f2f38;
@@ -412,20 +416,39 @@ body {
   gap: 12px;
 }
 
-.selection-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.pill {
-  padding: 5px 10px;
-  border-radius: 14px;
+.footer-actions  { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.footer-profiles { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.footer-actions .btn,
+.footer-profiles .btn { white-space: nowrap; }
+
+.profile-control {
+  display: inline-flex;
+  align-items: stretch;
   background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.profile-control select {
+  background: transparent;
+  color: var(--text);
+  border: none;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 220px;
+}
+.profile-control select:focus { outline: none; }
+.profile-control select option { background: var(--bg-elev); color: var(--text); }
+.profile-control #btn-delete-profile {
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0 8px;
   font-size: 12px;
   color: var(--text-muted);
 }
-.pill strong { color: var(--text); font-weight: 600; margin-left: 4px; }
-.pill-public  { border-left: 3px solid var(--accent); }
-.pill-private { border-left: 3px solid var(--yellow); }
-.arrow { color: var(--text-muted); }
-
-.footer-actions { display: flex; gap: 8px; }
+.profile-control #btn-delete-profile:hover { color: var(--red); background: rgba(226, 92, 92, 0.12); }
 
 .btn {
   font-family: inherit;
@@ -480,6 +503,7 @@ body {
   flex-direction: column;
   overflow: hidden;
 }
+.modal.modal-narrow { width: min(360px, 92vw); }
 
 .modal-header {
   display: flex;

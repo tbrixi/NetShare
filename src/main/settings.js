@@ -12,7 +12,11 @@ const DEFAULT_SETTINGS = {
   // The ICS pair this app last enabled ({ source, target }), or null. Used to
   // identify the source when the unprivileged poll can't (e.g. VPN-tunnel
   // uplinks that carry no default-gateway route). Cleared when sharing stops.
-  activeShare: null
+  activeShare: null,
+  // User-saved Source/Target pairs: [{ id, name, source, target }]. Selected
+  // from the footer dropdown; lastProfileId is restored on app start.
+  profiles: [],
+  lastProfileId: null
 };
 
 function settingsPath(app) {

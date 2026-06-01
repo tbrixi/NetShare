@@ -1,5 +1,5 @@
 # Detects Windows ICS state without admin elevation.
-#  - ScopeAddress (the ICS gateway IP) is read from the registry — it defaults
+#  - ScopeAddress (the ICS gateway IP) is read from the registry - it defaults
 #    to 192.168.137.1 but is user-configurable, so we never hardcode it.
 #  - Target (private) = adapter currently holding that ScopeAddress IP.
 #  - Source (public)  = up adapter with IPv4 Forwarding=Enabled, a default
@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $adapters = @(Get-NetAdapter -IncludeHidden:$false)
 $icsServiceRunning = ((Get-Service -Name SharedAccess -ErrorAction SilentlyContinue).Status -eq 'Running')
 
-# Cumulative byte counters per adapter — the renderer diffs successive polls
+# Cumulative byte counters per adapter - the renderer diffs successive polls
 # to derive UP/DOWN rates.
 $stats = @{}
 Get-NetAdapterStatistics -ErrorAction SilentlyContinue | ForEach-Object {

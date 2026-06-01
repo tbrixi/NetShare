@@ -28,6 +28,6 @@ $task.Wait() | Out-Null
 $result = $task.Result
 
 $message = "HOTSPOT_START:$($result.Status)"
-if ($result.AdditionalErrorMessage) { $message += " — $($result.AdditionalErrorMessage)" }
+if ($result.AdditionalErrorMessage) { $message += " - $($result.AdditionalErrorMessage)" }
 Write-Output $message
 if ([int]$result.Status -ne 0) { throw $message }

@@ -73,10 +73,9 @@ function createMainWindow() {
     Menu.buildFromTemplate(items).popup({ window: win });
   });
 
-  // Auto-open DevTools when running from source / `npm run dev` — packaged
-  // builds (app.isPackaged) keep DevTools closed. NETSHARE_NO_DEVTOOLS=1
-  // disables this (used when capturing screenshots etc.).
-  if (!app.isPackaged && process.env.NETSHARE_NO_DEVTOOLS !== '1') {
+  // Open DevTools only when explicitly requested via NETSHARE_DEVTOOLS=1
+  // (set by `npm run dev`). `npm start` and packaged builds leave it closed.
+  if (!app.isPackaged && process.env.NETSHARE_DEVTOOLS === '1') {
     win.webContents.openDevTools({ mode: 'detach' });
   }
 

@@ -1,7 +1,7 @@
 # Configures the Mobile Hotspot's SSID, passphrase, and Wi-Fi band.
-# Uses ConfigureAccessPointBindingAsync — that's the only setter that lets us
-# control the band (the simpler ConfigureAccessPointAsync only takes SSID +
-# passphrase). The async call is awaited via the standard WindowsRuntimeSystem-
+# Uses ConfigureAccessPointAsync, which takes a
+# NetworkOperatorTetheringAccessPointConfiguration carrying SSID, passphrase
+# and Band. The async call is awaited via the standard WindowsRuntimeSystem-
 # Extensions.AsTask -> Task.Wait() bridge that ships with .NET Framework.
 
 param(
@@ -33,7 +33,18 @@ $cfg.Band       = switch ($Band) {
   'FiveGigahertz'         { 2 }
 }
 
-$asyncAction = $mgr.ConfigureAccessPointBindingAsync($cfg)
-[System.WindowsRuntimeSystemExtensions]::AsTask([Windows.Foundation.IAsyncAction]$asyncAction).Wait()
+$asyncAction = $mgr.ConfigureAccessPointAsync($cfg)
 
-Write-Output "HOTSPOT_CONFIGURED:$Ssid:$Band"
+# Await the IAsyncAction. A direct [IAsyncAction] cast fails on PS 5.1 — the
+# value comes back as a bare System.__ComObject — so locate the
+# AsTask(IAsyncAction) overload by reflection and invoke it with the raw WinRT
+# object; the CLR marshals it to the interface parameter. (hotspot-start.ps1
+# uses the same trick for the generic IAsyncOperation overload.)
+$asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+  $_.Name -eq 'AsTask' -and
+  $_.GetParameters().Count -eq 1 -and
+  $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncAction'
+} | Select-Object -First 1
+$asTask.Invoke($null, @($asyncAction)).Wait()
+
+Write-Output "HOTSPOT_CONFIGURED:${Ssid}:$Band"

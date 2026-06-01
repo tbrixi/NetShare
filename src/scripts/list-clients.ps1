@@ -2,7 +2,7 @@
 #
 # Why the cache alone is not enough: ICS's built-in DHCP server inserts each
 # lease into Windows' neighbor cache as State=Permanent. Permanent entries
-# never age out — when a device renews and gets a new IP, BOTH the old
+# never age out - when a device renews and gets a new IP, BOTH the old
 # (e.g. .253) and new (e.g. .42) entries persist with the same MAC and the
 # same Permanent state. Get-NetNeighbor + state filtering cannot tell them
 # apart, so we have to actively probe each candidate IP to decide what is
@@ -11,7 +11,7 @@
 # Liveness check per candidate:
 #   1. ICMP echo (from the broad async sweep, plus up to 2 retries for
 #      devices that ignored the first attempt because of Wi-Fi power-save).
-#   2. If ICMP stays silent, TCP-connect to a list of common ports — a
+#   2. If ICMP stays silent, TCP-connect to a list of common ports - a
 #      successful connect OR a fast ConnectionRefused (RST) both prove the
 #      host is up. Catches devices that block ICMP but still expose any
 #      port at all (Windows SMB, macOS SSH, routers' web UI, etc.).

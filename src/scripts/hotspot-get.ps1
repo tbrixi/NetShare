@@ -3,7 +3,7 @@
 # renderer can populate the hotspot modal in one round trip.
 #
 # Requires Windows PowerShell 5.1 (the WinRT projection used here, with
-# ContentType=WindowsRuntime, only works in PS 5.1 — not pwsh 7).
+# ContentType=WindowsRuntime, only works in PS 5.1 - not pwsh 7).
 
 $ErrorActionPreference = 'Stop'
 

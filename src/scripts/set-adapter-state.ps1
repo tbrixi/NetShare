@@ -1,4 +1,4 @@
-# Enables or disables a network adapter — the same operation as the
+# Enables or disables a network adapter - the same operation as the
 # Enable/Disable command in the Windows "Network Connections" control panel.
 # Requires Administrator: Enable-NetAdapter / Disable-NetAdapter are privileged.
 

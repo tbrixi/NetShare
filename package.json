@@ -5,12 +5,12 @@
   "description": "Manage Windows Internet Connection Sharing (ICS) between network adapters",
   "main": "src/main/index.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electronmon .",
-    "icon": "powershell -NoProfile -ExecutionPolicy Bypass -File build/make-icon.ps1",
     "clear": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "start": "electron .",
+    "dev": "set NETSHARE_DEVTOOLS=1 && electronmon .",    
     "build": "electron-builder --win portable",
-    "pack": "electron-builder --dir"
+    "pack": "electron-builder --dir",
+	"icon": "powershell -NoProfile -ExecutionPolicy Bypass -File build/make-icon.ps1"
   },
   "electronmon": {
     "patterns": [

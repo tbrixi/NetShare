@@ -75,10 +75,14 @@
   </section>
 
   <footer class="app-footer">
-    <div class="selection-summary" id="selection-summary">
-      <span class="pill pill-public">Source: <strong id="sel-public">—</strong></span>
-      <span class="arrow">→</span>
-      <span class="pill pill-private">Target: <strong id="sel-private">—</strong></span>
+    <div class="footer-profiles">
+      <div class="profile-control">
+        <select id="profile-select" title="Load a saved Source / Target pair"></select>
+        <button id="btn-delete-profile" class="btn-icon" hidden
+                title="Delete the selected profile">✕</button>
+      </div>
+      <button id="btn-save-profile" class="btn btn-ghost" hidden
+              title="Save current Source + Target as a profile">＋ Save as profile</button>
     </div>
     <div class="footer-actions">
       <button id="btn-reset" class="btn btn-ghost"
@@ -99,6 +103,26 @@
     </header>
     <ul id="console-log" class="console-log"></ul>
   </section>
+
+  <div id="profile-overlay" class="overlay hidden">
+    <div class="modal modal-narrow" role="dialog" aria-labelledby="profile-title">
+      <header class="modal-header">
+        <h2 id="profile-title">Save profile</h2>
+        <button id="btn-profile-close" class="btn-icon" aria-label="Close">✕</button>
+      </header>
+      <div class="modal-body">
+        <label class="field">
+          <span>Profile name</span>
+          <input type="text" id="profile-name" autocomplete="off" maxlength="60" />
+          <small id="profile-pair-hint" class="muted"></small>
+        </label>
+      </div>
+      <footer class="modal-footer">
+        <button id="btn-profile-cancel" class="btn btn-ghost">Cancel</button>
+        <button id="btn-profile-save" class="btn btn-primary">Save</button>
+      </footer>
+    </div>
+  </div>
 
   <div id="options-overlay" class="overlay hidden">
     <div class="modal" role="dialog" aria-labelledby="options-title">

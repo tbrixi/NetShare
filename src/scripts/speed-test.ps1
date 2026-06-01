@@ -2,9 +2,11 @@
 # machine's internet uplink, and emits the result as JSON.
 #
 # Optionally pins the test to a given local source IP so it reflects a specific
-# adapter's uplink. This is best effort: Windows still routes by destination,
-# but the connection's local endpoint is bound to the requested adapter's
-# address, which is exactly what happens for the normal single-uplink case.
+# adapter's uplink. This is best effort: the bound connection is probed first,
+# and if it cannot connect - common for VPN tunnel adapters (NordLynx,
+# WireGuard, etc.) whose tunnel IP is not directly bindable - the test
+# transparently falls back to the machine's default route. The `Bound` field
+# in the output reports which path was actually used.
 #
 # Uses Cloudflare's public speed-test endpoints (no API key required):
 #   https://speed.cloudflare.com/__down?bytes=N   - serves N bytes
@@ -12,7 +14,7 @@
 #
 # Always exits 0 and emits a single JSON object so the caller can surface a
 # clean error instead of a non-zero exit:
-#   { Ok, DownMbps, UpMbps, PingMs, DownBytes, UpBytes, Error }
+#   { Ok, DownMbps, UpMbps, PingMs, Bound, DownBytes, UpBytes, Error }
 
 param(
   [string] $SourceIP  = '',
@@ -30,21 +32,22 @@ try {
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
   [Net.ServicePointManager]::Expect100Continue = $false
 
-  # When a source IP is supplied, bind every connection's local endpoint to it
-  # so the test runs over the chosen adapter. The delegate is attached to the
-  # ServicePoint, which is shared per host - that is fine, all our requests go
-  # to the same host. The BindIPEndPointDelegate type cannot be named directly
-  # on Windows PowerShell 5.1, but assigning a scriptblock to the property
-  # lets PowerShell coerce it to the delegate type automatically.
-  $bindBlock = $null
+  # $script:bindBlock is applied to every request's ServicePoint. It starts as
+  # the source-IP binding (when requested) and is cleared to $null if that bind
+  # turns out not to be routable, so the test falls back to the default route.
+  $script:bindBlock = $null
   if ($SourceIP) {
     $ip = ($SourceIP -split ',')[0].Trim()
-    $ipObj = [System.Net.IPAddress]::Parse($ip)
-    $localEP = New-Object System.Net.IPEndPoint -ArgumentList $ipObj, 0
-    $bindBlock = {
-      param($servicePoint, $remoteEndPoint, $retryCount)
-      return $localEP
-    }.GetNewClosure()
+    if ($ip) {
+      $ipObj = [System.Net.IPAddress]::Parse($ip)
+      $localEP = New-Object System.Net.IPEndPoint -ArgumentList $ipObj, 0
+      # BindIPEndPointDelegate cannot be named directly on Windows PowerShell
+      # 5.1; assigning a scriptblock lets PowerShell coerce it to the delegate.
+      $script:bindBlock = {
+        param($servicePoint, $remoteEndPoint, $retryCount)
+        return $localEP
+      }.GetNewClosure()
+    }
   }
 
   function New-Req([string]$Url, [int]$TimeoutMs) {
@@ -52,8 +55,35 @@ try {
     $r.Timeout = $TimeoutMs
     $r.ReadWriteTimeout = $TimeoutMs
     $r.Proxy = $null
-    if ($bindBlock) { $r.ServicePoint.BindIPEndPointDelegate = $bindBlock }
+    # Assigning $null also clears a binding left on a cached ServicePoint.
+    $r.ServicePoint.BindIPEndPointDelegate = $script:bindBlock
     return $r
+  }
+
+  function Test-Reachable {
+    try {
+      $r = New-Req 'https://speed.cloudflare.com/__down?bytes=0' 8000
+      $r.Method = 'GET'
+      $r.KeepAlive = $false
+      $resp = $r.GetResponse()
+      $resp.Dispose()
+      return $true
+    } catch {
+      return $false
+    }
+  }
+
+  # Verify the endpoint is reachable. If a source-IP bind was requested but the
+  # bound connection fails, drop the bind and retry over the default route.
+  $bound = [bool]$script:bindBlock
+  if (-not (Test-Reachable)) {
+    if ($script:bindBlock) {
+      $script:bindBlock = $null
+      $bound = $false
+    }
+    if (-not (Test-Reachable)) {
+      throw 'Cannot reach the speed-test server (speed.cloudflare.com).'
+    }
   }
 
   # --- Latency: reuse one keep-alive connection, take the fastest of 4 ---
@@ -121,6 +151,7 @@ try {
     DownMbps  = $downMbps
     UpMbps    = $upMbps
     PingMs    = $pingMs
+    Bound     = $bound
     DownBytes = $downTotal
     UpBytes   = $UpBytes
     Error     = $null
@@ -131,6 +162,7 @@ try {
     DownMbps  = $null
     UpMbps    = $null
     PingMs    = $null
+    Bound     = $false
     DownBytes = 0
     UpBytes   = 0
     Error     = $_.Exception.Message
